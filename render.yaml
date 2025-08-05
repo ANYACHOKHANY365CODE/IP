@@ -1,7 +1,6 @@
 services:
   - type: web
-    name: ip-logger
+    name: ip-tracker
     env: python
     buildCommand: ""
-    startCommand: waitress-serve --port=$PORT app:app
-    autoDeploy: true
+    startCommand: python app.py
