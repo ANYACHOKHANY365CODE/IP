@@ -1,38 +1,59 @@
 from flask import Flask, request
 from datetime import datetime
+import requests
 
 app = Flask(__name__)
-
 LOG_FILE = "visitors.log"
 
 def get_ip():
-    # Try to get real IP behind proxies (like Render)
-    if "X-Forwarded-For" in request.headers:
-        return request.headers["X-Forwarded-For"].split(',')[0].strip()
-    return request.remote_addr
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    return request.remote_addr or "Unknown"
+
+def get_location_info(ip):
+    try:
+        response = requests.get(f"https://ipinfo.io/{ip}/json", timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            city = data.get("city", "Unknown")
+            region = data.get("region", "Unknown")
+            country = data.get("country", "Unknown")
+            org = data.get("org", "Unknown")
+            loc = data.get("loc", "Unknown")
+            return f"{city}, {region}, {country} | Org: {org} | Coords: {loc}"
+    except:
+        pass
+    return "Location info unavailable"
 
 @app.route('/')
 def home():
     ip = get_ip()
-    user_agent = request.headers.get('User-Agent')
+    location_info = get_location_info(ip)
+    user_agent = request.headers.get('User-Agent', 'Unknown')
     path = request.path
     method = request.method
     url = request.url
-    referrer = request.referrer
+    referrer = request.referrer or "None"
     headers = dict(request.headers)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     log_entry = (
         f"[{timestamp}]\n"
         f"IP: {ip}\n"
+        f"Location: {location_info}\n"
         f"Method: {method}\n"
         f"Path: {path}\n"
         f"URL: {url}\n"
         f"Referrer: {referrer}\n"
         f"User-Agent: {user_agent}\n"
-        f"Headers: {headers}\n"
-        f"{'-'*60}\n"
+        f"Headers:\n"
     )
+
+    for key, value in headers.items():
+        log_entry += f"  {key}: {value}\n"
+
+    log_entry += "-" * 60 + "\n"
 
     try:
         with open(LOG_FILE, "a") as f:
