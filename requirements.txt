@@ -1,2 +1,2 @@
-Flask
-waitress
+Flask==2.3.3
+user-agents==2.2.0
