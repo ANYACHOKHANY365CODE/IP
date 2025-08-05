@@ -38,5 +38,13 @@ def home():
 
     return f"Your IP ({ip}) has been recorded!"
 
+@app.route('/show-log')
+def show_log():
+    try:
+        with open("visitors.log", "r") as f:
+            return f"<pre>{f.read()}</pre>"
+    except Exception as e:
+        return str(e)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
