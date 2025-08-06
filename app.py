@@ -3,16 +3,33 @@ from datetime import datetime
 from werkzeug.middleware.proxy_fix import ProxyFix
 import requests
 import os
+import ipaddress
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 LOG_FILE = "visitors.log"
 
+
 def get_ip():
+    # Get X-Forwarded-For and split
     forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
-    return request.remote_addr or "Unknown"
+    ip_list = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
+
+    # Return the first public (non-private) IP
+    for ip in ip_list:
+        try:
+            if not ipaddress.ip_address(ip).is_private:
+                return ip
+        except ValueError:
+            continue
+
+    # Fallback to remote_addr
+    try:
+        if not ipaddress.ip_address(request.remote_addr).is_private:
+            return request.remote_addr
+    except ValueError:
+        pass
+
+    return "Unknown"
 
 def get_location_info(ip):
     try:
