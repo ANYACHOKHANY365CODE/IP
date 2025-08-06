@@ -8,18 +8,34 @@ app = Flask(__name__)
 LOG_FILE = "visitors.log"
 
 def get_ip():
-    # Look for X-Forwarded-For and filter for public IPs
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    ip_list = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
-
-    for ip in ip_list:
-        try:
-            ip_obj = ipaddress.ip_address(ip)
-            if not ip_obj.is_private and not ip_obj.is_loopback:
-                return ip
-        except ValueError:
-            continue
-
+    # Check all possible proxy headers for the real IP
+    proxy_headers = [
+        'X-Real-IP',
+        'X-Forwarded-For', 
+        'X-Client-IP',
+        'CF-Connecting-IP',  # Cloudflare
+        'X-Forwarded',
+        'Forwarded-For',
+        'Forwarded'
+    ]
+    
+    # First, try to get IP from proxy headers
+    for header in proxy_headers:
+        if header in request.headers:
+            ip_value = request.headers[header]
+            if ip_value:
+                # Handle comma-separated lists (common in X-Forwarded-For)
+                ip_list = [ip.strip() for ip in ip_value.split(",") if ip.strip()]
+                
+                for ip in ip_list:
+                    try:
+                        ip_obj = ipaddress.ip_address(ip)
+                        # Return the first public IP we find
+                        if not ip_obj.is_private and not ip_obj.is_loopback:
+                            return ip
+                    except ValueError:
+                        continue
+    
     # Fallback to remote_addr only if it's public
     try:
         ip_obj = ipaddress.ip_address(request.remote_addr)
@@ -89,6 +105,18 @@ def show_log():
             return f"<pre>{f.read()}</pre>"
     except Exception as e:
         return str(e)
+
+@app.route('/debug-headers')
+def debug_headers():
+    """Debug route to show all request headers for troubleshooting"""
+    headers_info = "Request Headers:\n"
+    for key, value in request.headers.items():
+        headers_info += f"{key}: {value}\n"
+    
+    headers_info += f"\nRemote Address: {request.remote_addr}\n"
+    headers_info += f"Detected IP: {get_ip()}\n"
+    
+    return f"<pre>{headers_info}</pre>"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
