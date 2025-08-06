@@ -1,9 +1,11 @@
 from flask import Flask, request
 from datetime import datetime
+from werkzeug.middleware.proxy_fix import ProxyFix
 import requests
 import os
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 LOG_FILE = "visitors.log"
 
 def get_ip():
