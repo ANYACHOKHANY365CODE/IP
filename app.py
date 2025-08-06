@@ -73,6 +73,9 @@ def home():
     headers = dict(request.headers)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Print the detected IP to terminal for visibility
+    print(f"[{timestamp}] Visitor IP: {ip} | Remote: {request.remote_addr}")
+
     log_entry = (
         f"[{timestamp}]\n"
         f"IP: {ip}\n"
