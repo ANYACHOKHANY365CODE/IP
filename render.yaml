@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: ip-logger
-    env: python
-    buildCommand: ""
-    startCommand: waitress-serve --port=$PORT app:app
-    autoDeploy: true
