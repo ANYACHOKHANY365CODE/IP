@@ -138,7 +138,7 @@ def home():
         logger.error(f"Error saving visitor data: {e}")
         return f"Error logging: {e}"
 
-    return f"Your IP ({ip}) has been recorded!"
+    return f"Thank you for visiting Go Green!"
 
 @app.route('/show-log')
 def show_log():
