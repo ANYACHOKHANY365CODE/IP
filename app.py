@@ -3,9 +3,14 @@ from datetime import datetime
 import ipaddress
 import requests
 import os
+import logging
 
 app = Flask(__name__)
 LOG_FILE = "visitors.log"
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_ip():
     # Check all possible proxy headers for the real IP
@@ -73,8 +78,9 @@ def home():
     headers = dict(request.headers)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Print the detected IP to terminal for visibility
-    print(f"[{timestamp}] Visitor IP: {ip} | Remote: {request.remote_addr}")
+    # Log the detected IP to terminal for visibility
+    logger.info(f"[{timestamp}] Visitor IP: {ip} | Remote: {request.remote_addr}")
+    logger.info(f"Request from: {request.remote_addr} -> Detected IP: {ip}")
 
     log_entry = (
         f"[{timestamp}]\n"
@@ -97,6 +103,7 @@ def home():
         with open(LOG_FILE, "a") as f:
             f.write(log_entry)
     except Exception as e:
+        logger.error(f"Error logging: {e}")
         return f"Error logging: {e}"
 
     return f"Your IP ({ip}) has been recorded!"
