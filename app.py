@@ -1,30 +1,29 @@
 from flask import Flask, request
 from datetime import datetime
-from werkzeug.middleware.proxy_fix import ProxyFix
+import ipaddress
 import requests
 import os
-import ipaddress
 
 app = Flask(__name__)
 LOG_FILE = "visitors.log"
 
-
 def get_ip():
-    # Get X-Forwarded-For and split
+    # Look for X-Forwarded-For and filter for public IPs
     forwarded_for = request.headers.get("X-Forwarded-For", "")
     ip_list = [ip.strip() for ip in forwarded_for.split(",") if ip.strip()]
 
-    # Return the first public (non-private) IP
     for ip in ip_list:
         try:
-            if not ipaddress.ip_address(ip).is_private:
+            ip_obj = ipaddress.ip_address(ip)
+            if not ip_obj.is_private and not ip_obj.is_loopback:
                 return ip
         except ValueError:
             continue
 
-    # Fallback to remote_addr
+    # Fallback to remote_addr only if it's public
     try:
-        if not ipaddress.ip_address(request.remote_addr).is_private:
+        ip_obj = ipaddress.ip_address(request.remote_addr)
+        if not ip_obj.is_private and not ip_obj.is_loopback:
             return request.remote_addr
     except ValueError:
         pass
@@ -94,4 +93,3 @@ def show_log():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
