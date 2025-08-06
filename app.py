@@ -4,13 +4,24 @@ import ipaddress
 import requests
 import os
 import logging
+from supabase import create_client, Client
 
 app = Flask(__name__)
-LOG_FILE = "visitors.log"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Supabase client
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_KEY")
+supabase: Client = None
+
+if supabase_url and supabase_key:
+    supabase = create_client(supabase_url, supabase_key)
+    logger.info("Supabase connected successfully")
+else:
+    logger.warning("Supabase credentials not found, using local storage")
 
 def get_ip():
     # Check all possible proxy headers for the real IP
@@ -82,28 +93,49 @@ def home():
     logger.info(f"[{timestamp}] Visitor IP: {ip} | Remote: {request.remote_addr}")
     logger.info(f"Request from: {request.remote_addr} -> Detected IP: {ip}")
 
-    log_entry = (
-        f"[{timestamp}]\n"
-        f"IP: {ip}\n"
-        f"Location: {location_info}\n"
-        f"Method: {method}\n"
-        f"Path: {path}\n"
-        f"URL: {url}\n"
-        f"Referrer: {referrer}\n"
-        f"User-Agent: {user_agent}\n"
-        f"Headers:\n"
-    )
+    # Prepare visitor data
+    visitor_data = {
+        "timestamp": timestamp,
+        "ip_address": ip,
+        "location_info": location_info,
+        "user_agent": user_agent,
+        "method": method,
+        "path": path,
+        "url": url,
+        "referrer": referrer,
+        "remote_addr": request.remote_addr,
+        "headers": str(headers)
+    }
 
-    for key, value in headers.items():
-        log_entry += f"  {key}: {value}\n"
-
-    log_entry += "-" * 60 + "\n"
-
+    # Save to Supabase if available, otherwise use local file
     try:
-        with open(LOG_FILE, "a") as f:
-            f.write(log_entry)
+        if supabase:
+            # Save to Supabase database
+            result = supabase.table('visitors').insert(visitor_data).execute()
+            logger.info(f"Saved to Supabase: {ip}")
+        else:
+            # Fallback to local file
+            LOG_FILE = "visitors.log"
+            log_entry = (
+                f"[{timestamp}]\n"
+                f"IP: {ip}\n"
+                f"Location: {location_info}\n"
+                f"Method: {method}\n"
+                f"Path: {path}\n"
+                f"URL: {url}\n"
+                f"Referrer: {referrer}\n"
+                f"User-Agent: {user_agent}\n"
+                f"Headers:\n"
+            )
+            for key, value in headers.items():
+                log_entry += f"  {key}: {value}\n"
+            log_entry += "-" * 60 + "\n"
+            
+            with open(LOG_FILE, "a") as f:
+                f.write(log_entry)
+            logger.info(f"Saved to local file: {ip}")
     except Exception as e:
-        logger.error(f"Error logging: {e}")
+        logger.error(f"Error saving visitor data: {e}")
         return f"Error logging: {e}"
 
     return f"Your IP ({ip}) has been recorded!"
@@ -111,8 +143,30 @@ def home():
 @app.route('/show-log')
 def show_log():
     try:
-        with open(LOG_FILE, "r") as f:
-            return f"<pre>{f.read()}</pre>"
+        if supabase:
+            # Get data from Supabase
+            result = supabase.table('visitors').select('*').order('timestamp', desc=True).execute()
+            visitors = result.data
+            
+            # Format the data
+            content = ""
+            for visitor in visitors:
+                content += f"[{visitor['timestamp']}]\n"
+                content += f"IP: {visitor['ip_address']}\n"
+                content += f"Location: {visitor['location_info']}\n"
+                content += f"Method: {visitor['method']}\n"
+                content += f"Path: {visitor['path']}\n"
+                content += f"URL: {visitor['url']}\n"
+                content += f"Referrer: {visitor['referrer']}\n"
+                content += f"User-Agent: {visitor['user_agent']}\n"
+                content += f"Headers: {visitor['headers']}\n"
+                content += "-" * 60 + "\n"
+        else:
+            # Fallback to local file
+            with open("visitors.log", "r") as f:
+                content = f.read()
+        
+        return f"<pre>{content}</pre>"
     except Exception as e:
         return str(e)
 
@@ -132,6 +186,87 @@ def debug_headers():
 def health():
     """Health check route for deployment platforms"""
     return "OK", 200
+
+@app.route('/visitors')
+def show_visitors():
+    """Show recent visitors in a web interface"""
+    try:
+        if supabase:
+            # Get data from Supabase
+            result = supabase.table('visitors').select('*').order('timestamp', desc=True).execute()
+            visitors = result.data
+            
+            # Format the data
+            content = ""
+            for visitor in visitors:
+                content += f"[{visitor['timestamp']}]\n"
+                content += f"IP: {visitor['ip_address']}\n"
+                content += f"Location: {visitor['location_info']}\n"
+                content += f"Method: {visitor['method']}\n"
+                content += f"Path: {visitor['path']}\n"
+                content += f"URL: {visitor['url']}\n"
+                content += f"Referrer: {visitor['referrer']}\n"
+                content += f"User-Agent: {visitor['user_agent']}\n"
+                content += f"Headers: {visitor['headers']}\n"
+                content += "-" * 60 + "\n"
+        else:
+            # Fallback to local file
+            with open("visitors.log", "r") as f:
+                content = f.read()
+        
+        return f"""
+        <html>
+        <head>
+            <title>Recent Visitors</title>
+            <meta http-equiv="refresh" content="10">
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                pre {{ background: #f5f5f5; padding: 15px; border-radius: 5px; }}
+                .header {{ background: #007bff; color: white; padding: 10px; border-radius: 5px; margin-bottom: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>📊 Recent Visitors</h2>
+                <p>Auto-refreshes every 10 seconds</p>
+            </div>
+            <pre>{content}</pre>
+        </body>
+        </html>
+        """
+    except Exception as e:
+        return f"Error reading log: {e}"
+
+@app.route('/api/visitors')
+def api_visitors():
+    """API endpoint to get visitor data as JSON"""
+    try:
+        if supabase:
+            # Get data from Supabase
+            result = supabase.table('visitors').select('*').order('timestamp', desc=True).execute()
+            visitors = result.data
+            
+            # Format the data
+            content = ""
+            for visitor in visitors:
+                content += f"[{visitor['timestamp']}]\n"
+                content += f"IP: {visitor['ip_address']}\n"
+                content += f"Location: {visitor['location_info']}\n"
+                content += f"Method: {visitor['method']}\n"
+                content += f"Path: {visitor['path']}\n"
+                content += f"URL: {visitor['url']}\n"
+                content += f"Referrer: {visitor['referrer']}\n"
+                content += f"User-Agent: {visitor['user_agent']}\n"
+                content += f"Headers: {visitor['headers']}\n"
+                content += "-" * 60 + "\n"
+        else:
+            # Fallback to local file
+            with open("visitors.log", "r") as f:
+                content = f.read()
+        
+        return {"visitors_log": content, "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
