@@ -1,6 +1,7 @@
 from flask import Flask, request
 from datetime import datetime
 import requests
+import os
 
 app = Flask(__name__)
 LOG_FILE = "visitors.log"
@@ -71,5 +72,7 @@ def show_log():
     except Exception as e:
         return str(e)
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
+
